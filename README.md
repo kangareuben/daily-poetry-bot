@@ -53,7 +53,7 @@ A dry run still logs in to Bluesky, so it also checks your credentials.
 
 [`.github/workflows/post.yml`](.github/workflows/post.yml) runs the bot daily at 14:00 UTC, and can also be triggered manually from the Actions tab. Add `BSKY_HANDLE` and `BSKY_PASSWORD` as repository secrets under **Settings → Secrets and variables → Actions**.
 
-Scheduled workflows on GitHub can run late and are disabled after 60 days without repository activity.
+GitHub disables scheduled workflows after 60 days without repository activity, so the workflow re-enables itself through the API on every run to reset that timer. Scheduled runs can also start a little late.
 
 ## Credits
 
