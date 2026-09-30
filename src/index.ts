@@ -1,6 +1,11 @@
+import { env } from "node:process";
 import Bot from "./lib/bot.js";
 import getPostText from "./lib/getPostText.js";
 
-const text = await Bot.run(getPostText, { dryRun: true });
+const dryRun = env.DRY_RUN === "true";
 
-console.log(`[${new Date().toISOString()}] Posted: "${text}"`);
+const text = await Bot.run(getPostText, { dryRun });
+
+console.log(
+  `[${new Date().toISOString()}] ${dryRun ? "Dry run" : "Posted"}: "${text}"`
+);

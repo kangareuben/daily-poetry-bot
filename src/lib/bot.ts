@@ -60,8 +60,6 @@ export default class Bot {
     const text = (await getPostText()).trim();
     if (!dryRun) {
       await bot.post(text);
-    } else {
-      console.log(text);
     }
     return text;
   }

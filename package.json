@@ -1,7 +1,7 @@
 {
-  "name": "bsky-bot",
+  "name": "dailypoetrybot",
   "version": "1.0.0",
-  "description": "A template repo for building Bluesky bots",
+  "description": "A Bluesky bot that posts an excerpt of public domain poetry each day",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
