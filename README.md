@@ -2,6 +2,8 @@
 
 A [Bluesky](https://bsky.app/) bot that posts a short excerpt of public domain poetry once a day, with attribution.
 
+**Follow it at [@dailypoetry.bsky.social](https://bsky.app/profile/dailypoetry.bsky.social).**
+
 ```
 While on my lonely couch I lie,
 I seldom feel myself alone,
