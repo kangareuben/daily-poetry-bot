@@ -51,9 +51,20 @@ A dry run still logs in to Bluesky, so it also checks your credentials.
 
 ## Deployment
 
-[`.github/workflows/post.yml`](.github/workflows/post.yml) runs the bot daily at 14:17 UTC (off the hour, when GitHub is less likely to delay or drop scheduled runs), and can also be triggered manually from the Actions tab. Add `BSKY_HANDLE` and `BSKY_PASSWORD` as repository secrets under **Settings → Secrets and variables → Actions**.
+[`.github/workflows/post.yml`](.github/workflows/post.yml) builds and runs the bot. Add `BSKY_HANDLE` and `BSKY_PASSWORD` as repository secrets under **Settings → Secrets and variables → Actions**. You can run it by hand from the Actions tab.
 
-GitHub disables scheduled workflows after 60 days without repository activity, so the workflow re-enables itself through the API on every run to reset that timer. Scheduled runs can also start a little late.
+GitHub's built-in `schedule` trigger proved unreliable (runs were dropped entirely), so the workflow is started daily at 14:17 UTC by [cron-job.org](https://cron-job.org), which calls GitHub's API:
+
+```
+POST https://api.github.com/repos/kangareuben/daily-poetry-bot/actions/workflows/post.yml/dispatches
+Authorization: Bearer <token>
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+
+{"ref": "main"}
+```
+
+The token is a fine-grained personal access token limited to this repository with only the **Actions: Read and write** permission. It expires, so it needs replacing periodically.
 
 ## Credits
 

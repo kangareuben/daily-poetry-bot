@@ -1,16 +1,12 @@
 name: "Post to Bluesky"
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "17 14 * * *"
+# Triggered daily by an external scheduler (cron-job.org) calling the
+# workflow_dispatch API, because GitHub's own schedule kept dropping runs.
+on: workflow_dispatch
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
     steps:
       - uses: actions/checkout@v7
       - name: Use Node.js
@@ -24,10 +20,3 @@ jobs:
         env:
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_PASSWORD: ${{ secrets.BSKY_PASSWORD }}
-      # GitHub disables scheduled workflows after 60 days without repository
-      # activity. Re-enabling the workflow through the API resets that timer.
-      - name: Keep scheduled workflow enabled
-        if: ${{ !cancelled() }}
-        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/post.yml/enable"
-        env:
-          GH_TOKEN: ${{ github.token }}
