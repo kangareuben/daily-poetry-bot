@@ -80,8 +80,9 @@ function findExcerpts(poem: Poem) {
 }
 
 async function fetchPoems(): Promise<Poem[]> {
+  // PoetryDB routinely takes 5-10 seconds to return a batch of poems.
   const response = await fetch(POEMS_URL, {
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(45_000),
   });
   if (!response.ok) {
     throw new Error(`PoetryDB request failed: ${response.status}`);
@@ -94,10 +95,21 @@ function pickRandom<T>(items: T[]) {
 }
 
 export default async function getPostText() {
+  let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let poems: Poem[];
+    try {
+      poems = await fetchPoems();
+    } catch (error) {
+      // A slow or failed request shouldn't cost the day's post; try again.
+      console.warn(`PoetryDB attempt ${attempt} failed:`, error);
+      lastError = error;
+      continue;
+    }
+
     // Pick a poem first, then an excerpt, so long poems with many candidate
     // excerpts aren't favoured.
-    const usable = (await fetchPoems())
+    const usable = poems
       .map((poem) => ({ poem, excerpts: findExcerpts(poem) }))
       .filter(({ excerpts }) => excerpts.length > 0);
     if (usable.length > 0) {
@@ -105,5 +117,8 @@ export default async function getPostText() {
       return formatPost(pickRandom(excerpts), poem);
     }
   }
-  throw new Error(`No usable excerpt found after ${MAX_ATTEMPTS} attempts`);
+  throw new Error(
+    `No usable excerpt from PoetryDB after ${MAX_ATTEMPTS} attempts`,
+    { cause: lastError }
+  );
 }
