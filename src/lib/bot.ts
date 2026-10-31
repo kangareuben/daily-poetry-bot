@@ -6,6 +6,10 @@ import type {
 } from "@atproto/api";
 import { AtpAgent, RichText } from "@atproto/api";
 
+type PostRecord =
+  & Partial<AppBskyFeedPost.Record>
+  & Omit<AppBskyFeedPost.Record, "createdAt">;
+
 interface BotOptions {
   service: string | URL;
   dryRun: boolean;
@@ -27,14 +31,7 @@ export default class Bot {
     return this.#agent.login(loginOpts);
   }
 
-  async post(
-    text:
-      | string
-      | (
-        & Partial<AppBskyFeedPost.Record>
-        & Omit<AppBskyFeedPost.Record, "createdAt">
-      ),
-  ) {
+  async post(text: string | PostRecord) {
     if (typeof text === "string") {
       const richText = new RichText({ text });
       await richText.detectFacets(this.#agent);
@@ -49,7 +46,7 @@ export default class Bot {
   }
 
   static async run(
-    getPostText: () => Promise<string>,
+    getPostText: () => Promise<string | PostRecord>,
     botOptions?: Partial<BotOptions>,
   ) {
     const { service, dryRun } = botOptions
@@ -57,10 +54,11 @@ export default class Bot {
       : this.defaultOptions;
     const bot = new Bot(service);
     await bot.login(bskyAccount);
-    const text = (await getPostText()).trim();
+    const content = await getPostText();
+    const post = typeof content === "string" ? content.trim() : content;
     if (!dryRun) {
-      await bot.post(text);
+      await bot.post(post);
     }
-    return text;
+    return typeof post === "string" ? post : post.text;
   }
 }

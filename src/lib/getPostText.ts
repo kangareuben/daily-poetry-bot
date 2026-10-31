@@ -1,16 +1,19 @@
 import { RichText } from "@atproto/api";
+import type { AppBskyFeedPost } from "@atproto/api";
+import type { Poem } from "./poem.js";
+import { fetchPoetryDbPoems } from "./poetrydb.js";
+import { getWikisourcePoem } from "./wikisource.js";
 
-interface Poem {
-  title: string;
-  author: string;
-  lines: string[];
-}
+// The post text, plus a link card to the full poem when there's a page for it.
+export type PostContent = Pick<AppBskyFeedPost.Record, "text" | "embed">;
 
-const POEMS_URL = "https://poetrydb.org/random/20";
 const MAX_GRAPHEMES = 300;
 const MAX_EXCERPT_LINES = 6;
 const MIN_EXCERPT_LENGTH = 25;
-const MAX_ATTEMPTS = 5;
+// Most Wikisource poems yield an excerpt; the rest are prose poems, sheet
+// music or pages in a format the extractor doesn't handle.
+const WIKISOURCE_ATTEMPTS = 8;
+const POETRYDB_ATTEMPTS = 5;
 
 // A line ending with one of these (optionally followed by closing quotes or
 // brackets) ends a sentence, so the next line is a good place to start.
@@ -24,18 +27,26 @@ function graphemeLength(text: string) {
   return new RichText({ text }).graphemeLength;
 }
 
-function formatPost(excerpt: string, poem: Poem) {
-  return `${excerpt}\n\n— ${poem.author}, “${poem.title}”`;
+function formatPost(excerpt: string, poem: Poem): PostContent {
+  const text = `${excerpt}\n\n— ${poem.author}, “${poem.title}”`;
+  if (!poem.url) return { text };
+  return {
+    text,
+    embed: {
+      $type: "app.bsky.embed.external",
+      external: {
+        uri: poem.url,
+        title: `${poem.title} by ${poem.author}`,
+        description: "Read the full poem on Wikisource",
+      },
+    },
+  };
 }
 
 // Find runs of lines that start at the beginning of a sentence and end at the
 // end of a sentence or stanza, so the excerpt reads as a complete thought.
 function findExcerpts(poem: Poem) {
-  // PoetryDB writes em dashes as "--", marks italics with underscores, and
-  // sometimes pads lines with runs of spaces.
-  const lines = poem.lines.map((line) =>
-    line.trim().replaceAll("--", "—").replaceAll("_", "").replace(/\s+/g, " ")
-  );
+  const lines = poem.lines.map((line) => line.replace(/\s+/g, " ").trim());
   const excerpts: string[] = [];
 
   for (let start = 0; start < lines.length; start++) {
@@ -68,7 +79,7 @@ function findExcerpts(poem: Poem) {
         excerpt.length >= MIN_EXCERPT_LENGTH &&
         // All-caps lines are headings, epigraphs or speaker labels, not verse.
         excerptLines.every((line) => HAS_LOWERCASE.test(line)) &&
-        graphemeLength(formatPost(excerpt, poem)) <= MAX_GRAPHEMES
+        graphemeLength(formatPost(excerpt, poem).text) <= MAX_GRAPHEMES
       ) {
         excerpts.push(excerpt);
       }
@@ -79,27 +90,36 @@ function findExcerpts(poem: Poem) {
   return excerpts;
 }
 
-async function fetchPoems(): Promise<Poem[]> {
-  // PoetryDB routinely takes 5-10 seconds to return a batch of poems.
-  const response = await fetch(POEMS_URL, {
-    signal: AbortSignal.timeout(45_000),
-  });
-  if (!response.ok) {
-    throw new Error(`PoetryDB request failed: ${response.status}`);
-  }
-  return response.json();
-}
-
 function pickRandom<T>(items: T[]) {
   return items[Math.floor(Math.random() * items.length)];
 }
 
-export default async function getPostText() {
+async function fromWikisource() {
+  for (let attempt = 1; attempt <= WIKISOURCE_ATTEMPTS; attempt++) {
+    let poem: Poem | null;
+    try {
+      poem = await getWikisourcePoem();
+    } catch (error) {
+      console.warn(`Wikisource attempt ${attempt} failed:`, error);
+      continue;
+    }
+    if (!poem) continue;
+
+    const excerpts = findExcerpts(poem);
+    if (excerpts.length > 0) {
+      console.log(`Source: ${poem.url}`);
+      return formatPost(pickRandom(excerpts), poem);
+    }
+  }
+  return null;
+}
+
+async function fromPoetryDb() {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= POETRYDB_ATTEMPTS; attempt++) {
     let poems: Poem[];
     try {
-      poems = await fetchPoems();
+      poems = await fetchPoetryDbPoems();
     } catch (error) {
       // A slow or failed request shouldn't cost the day's post; try again.
       console.warn(`PoetryDB attempt ${attempt} failed:`, error);
@@ -114,11 +134,21 @@ export default async function getPostText() {
       .filter(({ excerpts }) => excerpts.length > 0);
     if (usable.length > 0) {
       const { poem, excerpts } = pickRandom(usable);
+      console.log("Source: PoetryDB");
       return formatPost(pickRandom(excerpts), poem);
     }
   }
   throw new Error(
-    `No usable excerpt from PoetryDB after ${MAX_ATTEMPTS} attempts`,
+    `No usable excerpt from PoetryDB after ${POETRYDB_ATTEMPTS} attempts`,
     { cause: lastError }
   );
+}
+
+// Wikisource has far more authors than PoetryDB, plus a page to link to, so
+// it's the main source; PoetryDB is the fallback if Wikisource is down.
+export default async function getPostText(): Promise<PostContent> {
+  const post = await fromWikisource();
+  if (post) return post;
+  console.warn("No usable Wikisource poem; falling back to PoetryDB");
+  return fromPoetryDb();
 }
